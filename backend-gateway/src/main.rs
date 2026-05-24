@@ -1,11 +1,18 @@
+mod models;
+use models::{Context, BecknRequest, SearchMessage, Intent, Fulfillment, Location, Catalog, Provider, Descriptor, Item, Price, AckMessage, AckStatus};
+
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_cors::Cors;
 use serde::{Deserialize, Serialize};
 use jsonwebtoken::{encode, Header, EncodingKey};
-use chrono::{Utc, DateTime};
+use chrono::Utc;
 use uuid::Uuid;
-use ed25519_dalek::{SigningKey, VerifyingKey, Signer, Signature, Verifier};
+use ed25519_dalek::{SigningKey, VerifyingKey, Signer};
 use base64::{engine::general_purpose, Engine as _};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use rand_core::OsRng;
+use redis::{AsyncCommands, Client};
 
 // --- Crypto Helpers ---
 
@@ -14,108 +21,25 @@ fn sign_data(data: &str, signing_key: &SigningKey) -> String {
     general_purpose::STANDARD.encode(signature.to_bytes())
 }
 
-fn verify_data(data: &str, signature_b64: &str, verifying_key: &VerifyingKey) -> bool {
-    let sig_bytes = match general_purpose::STANDARD.decode(signature_b64) {
-        Ok(bytes) => bytes,
-        Err(_) => return false,
-    };
-    let signature = match Signature::from_slice(&sig_bytes) {
-        Ok(sig) => sig,
-        Err(_) => return false,
-    };
-    verifying_key.verify(data.as_bytes(), &signature).is_ok()
+fn create_context(action: &str, transaction_id: Option<String>) -> Context {
+    Context {
+        domain: "nic2004:60221".to_string(),
+        country: "IND".to_string(),
+        city: "std:080".to_string(),
+        action: action.to_string(),
+        core_version: "1.0.0".to_string(),
+        bap_id: "bap.gateway.com".to_string(),
+        bap_uri: "http://localhost:8080".to_string(),
+        transaction_id: transaction_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+        message_id: Uuid::new_v4().to_string(),
+        timestamp: Utc::now(),
+    }
 }
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Context {
-    domain: String,
-    country: String,
-    city: String,
-    action: String,
-    core_version: String,
-    bap_id: String,
-    bap_uri: String,
-    transaction_id: String,
-    message_id: String,
-    timestamp: DateTime<Utc>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct BecknRequest<T> {
-    context: Context,
-    message: T,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Intent {
-    fulfillment: Fulfillment,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Fulfillment {
-    start: Location,
-    end: Location,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Location {
-    gps: String,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Catalog {
-    providers: Vec<Provider>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Provider {
-    id: String,
-    descriptor: Descriptor,
-    items: Vec<Item>,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Descriptor {
-    name: String,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Item {
-    id: String,
-    descriptor: Descriptor,
-    price: Price,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Price {
-    value: String,
-    currency: String,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct SearchRequest {
-    pickup_location: String,
-    drop_location: String,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct Claims {
-    sub: String,
-    exp: usize,
-}
-
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-use rand_core::OsRng; // Add this import
 
 struct CryptoState {
     signing_key: SigningKey,
     verifying_key: VerifyingKey,
 }
-
-use redis::{AsyncCommands, Client};
 
 struct AppState {
     redis_client: Client,
