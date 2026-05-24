@@ -1,25 +1,24 @@
 # --- Build Stage ---
 FROM rust:1.80-slim-bookworm AS builder
 
-# Install necessary build dependencies
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+# Copy the entire workspace to the build context
 COPY . .
 
-# Build the application in release mode
-RUN cargo build --release
+# Build the pricing-engine specifically
+RUN cargo build --release -p pricing-engine
 
 # --- Run Stage ---
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
 RUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 # Copy the binary from the build stage
-COPY --from=builder /app/target/release/backend-gateway /app/backend-gateway
+COPY --from=builder /app/target/release/pricing-engine /app/pricing-engine
 
-EXPOSE 8080
+EXPOSE 8081
 
-CMD ["./backend-gateway"]
+CMD ["./pricing-engine"]
