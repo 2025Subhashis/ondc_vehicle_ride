@@ -276,6 +276,9 @@ async fn index() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    println!("Starting server on port: {}", port);
+
     let app_state = web::Data::new(AppState {
         transactions: RwLock::new(HashMap::new()),
     });
@@ -302,7 +305,7 @@ async fn main() -> std::io::Result<()> {
             .service(confirm)
             .service(on_confirm)
     })
-    .bind(("0.0.0.0", 8080))?
+    .bind(format!("0.0.0.0:{}", port))?
     .run()
     .await
 }
