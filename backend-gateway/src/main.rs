@@ -112,9 +112,39 @@ fn create_context(action: &str, transaction_id: Option<String>) -> Context {
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct FareRequest {
+    distance: f64,
+    time_of_day: String,
+    supply: f64,
+    demand: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct FareResponse {
+    fare: f64,
+}
+
 #[post("/search")]
 async fn search(request: web::Json<SearchRequest>) -> impl Responder {
     let context = create_context("search", None);
+    
+    // Call Pricing Engine for dynamic fares
+    let client = reqwest::Client::new();
+    let pricing_url = "http://127.0.0.1:8081/calculate-fare";
+    
+    let fare_req = FareRequest {
+        distance: 10.5, // Mock distance
+        time_of_day: "14:00".to_string(),
+        supply: 5.0,
+        demand: 8.0,
+    };
+
+    let fare_res = match client.post(pricing_url).json(&fare_req).send().await {
+        Ok(res) => res.json::<FareResponse>().await.map(|r| r.fare).unwrap_or(150.0),
+        Err(_) => 150.0, // Fallback
+    };
+
     let message = Intent {
         fulfillment: Fulfillment {
             start: Location { gps: request.pickup_location.clone() },
@@ -122,17 +152,23 @@ async fn search(request: web::Json<SearchRequest>) -> impl Responder {
         },
     };
     
-    let beckn_request = BecknRequest {
-        context: context.clone(),
-        message,
-    };
-
-    println!("Initiating ONDC Search: transaction_id={}", context.transaction_id);
+    println!("Initiating ONDC Search with Fare calculation: transaction_id={}, calculated_fare={}", context.transaction_id, fare_res);
     
-    // In a real scenario, this would be sent to a BG or BPP
-    // For now, we return the synchronous ACK and simulated the async flow
     HttpResponse::Ok().json(serde_json::json!({
-        "message": { "ack": { "status": "ACK" } },
+        "message": { 
+            "ack": { "status": "ACK" },
+            "catalog": { // Including catalog in synchronous ACK for demonstration in frontend
+                "providers": [{
+                    "id": "BPP_1",
+                    "descriptor": { "name": "ONDC Ride Provider" },
+                    "items": [{
+                        "id": "item_sedan",
+                        "descriptor": { "name": "Premium Sedan" },
+                        "price": { "value": fare_res.to_string(), "currency": "INR" }
+                    }]
+                }]
+            }
+        },
         "context": context
     }))
 }
