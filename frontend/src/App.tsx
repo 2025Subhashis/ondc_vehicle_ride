@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LocationPicker from './LocationPicker'
 
 interface RideProvider {
   id: string;
@@ -17,6 +18,8 @@ function App() {
   const [drop, setDrop] = useState('')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<RideProvider[]>([])
+  
+  const [showMap, setShowMap] = useState<'pickup' | 'drop' | null>(null)
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,7 +36,6 @@ function App() {
       }
     } catch (error) {
       console.error('Search failed:', error)
-      // Fallback mock data for demo if backend is unreachable
       setResults([{
         id: 'mock_bpp',
         descriptor: { name: 'Demo Provider' },
@@ -50,6 +52,17 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Map Modal */}
+      {showMap && (
+        <LocationPicker 
+          onLocationSelect={(loc) => {
+            if (showMap === 'pickup') setPickup(loc);
+            else setDrop(loc);
+          }}
+          onClose={() => setShowMap(null)}
+        />
+      )}
+
       {/* Header */}
       <header className="bg-white border-b px-6 py-4 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
@@ -84,8 +97,10 @@ function App() {
                   type="text" 
                   value={pickup}
                   onChange={(e) => setPickup(e.target.value)}
-                  placeholder="Where from?" 
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900"
+                  onClick={() => setShowMap('pickup')}
+                  readOnly
+                  placeholder="Click to select pickup..." 
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900 cursor-pointer"
                   required
                 />
               </div>
@@ -95,8 +110,10 @@ function App() {
                   type="text" 
                   value={drop}
                   onChange={(e) => setDrop(e.target.value)}
-                  placeholder="Where to?" 
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900"
+                  onClick={() => setShowMap('drop')}
+                  readOnly
+                  placeholder="Click to select drop..." 
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900 cursor-pointer"
                   required
                 />
               </div>
@@ -152,6 +169,7 @@ function App() {
           </section>
         )}
       </main>
+...
 
       {/* Footer */}
       <footer className="bg-slate-900 text-slate-400 py-12 px-6">
