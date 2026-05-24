@@ -32,7 +32,13 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pickup_location: pickup, drop_location: drop })
       })
+
       const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Server error occurred');
+      }
+
       const txId = data.context.transaction_id
 
       // Start polling
@@ -49,10 +55,10 @@ function App() {
 
     } catch (error) {
       console.error('Search failed:', error)
+      alert('Search failed: ' + error)
       setLoading(false)
     }
   }
-
   // ... (handleSearch remains the same)
 
   return (
