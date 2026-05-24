@@ -269,8 +269,10 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         let cors = Cors::default()
             .allowed_origin("https://2025Subhashis.github.io")
-            .allowed_methods(vec!["GET", "POST"])
-            .allowed_headers(vec![actix_web::http::header::CONTENT_TYPE]);
+            .allowed_methods(vec!["GET", "POST", "OPTIONS"])
+            .allowed_headers(vec![actix_web::http::header::CONTENT_TYPE, actix_web::http::header::AUTHORIZATION])
+            .supports_credentials()
+            .max_age(3600);
         App::new()
             .wrap(cors)
             .service(index)
