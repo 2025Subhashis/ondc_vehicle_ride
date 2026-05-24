@@ -111,8 +111,19 @@ async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) ->
 }
 
 #[post("/on_search")]
-async fn on_search(request: web::Json<BecknRequest<Catalog>>, data: web::Data<AppState>) -> impl Responder {
-    println!("Received on_search for transaction_id={}", request.context.transaction_id);
+async fn on_search(
+    request: web::Json<BecknRequest<Catalog>>,
+    data: web::Data<AppState>,
+    req: actix_web::HttpRequest
+) -> impl Responder {
+    let signature = req.headers().get("X-Gateway-Signature").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let subscriber_id = "bap.gateway.com"; // Mock - normally extracted from context or registry
+
+    if !verify_incoming_request(&serde_json::to_string(&request.message).unwrap(), signature, subscriber_id, &data.crypto.participant_registry) {
+        return HttpResponse::Unauthorized().finish();
+    }
+
+    println!("Received valid on_search for transaction_id={}", request.context.transaction_id);
     
     let mut conn = match data.redis_client.get_async_connection().await {
         Ok(c) => c,
@@ -201,24 +212,36 @@ async fn simulate_on_search(path: web::Path<String>, data: web::Data<AppState>) 
     let _: () = conn.set(&tx_id, catalog.to_string()).await.unwrap();
     HttpResponse::Ok().json(serde_json::json!({"status": "callback_simulated"}))
 }
-
 #[post("/issue")]
-async fn issue(request: web::Json<BecknRequest<IssueMessage>>, data: web::Data<AppState>) -> impl Responder {
+async fn issue(
+    request: web::Json<BecknRequest<IssueMessage>>,
+    data: web::Data<AppState>,
+    req: actix_web::HttpRequest
+) -> impl Responder {
+    let signature = req.headers().get("X-Gateway-Signature").and_then(|v| v.to_str().ok()).unwrap_or("");
+    let subscriber_id = "bap.gateway.com"; // Mock
+
+    if !verify_incoming_request(&serde_json::to_string(&request.message).unwrap(), signature, subscriber_id, &data.crypto.participant_registry) {
+        return HttpResponse::Unauthorized().finish();
+    }
+
     let context = request.context.clone();
     let mut conn = match data.redis_client.get_async_connection().await {
         Ok(c) => c,
         Err(_) => return HttpResponse::InternalServerError().finish(),
     };
-    
+
+    // Persist issue state in Redis
     let _: () = conn.set(&request.message.issue.id, serde_json::json!(request.message.issue).to_string()).await.unwrap();
-    
+
     println!("Received ONDC Issue: issue_id={}", request.message.issue.id);
-    
+
     HttpResponse::Ok().json(serde_json::json!({
         "message": { "ack": { "status": "ACK" } },
         "context": context
     }))
 }
+
 
 #[post("/on_issue")]
 async fn on_issue(request: web::Json<BecknRequest<OnIssueMessage>>, data: web::Data<AppState>) -> impl Responder {
