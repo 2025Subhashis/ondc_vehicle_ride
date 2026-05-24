@@ -108,8 +108,24 @@ async fn login() -> impl Responder {
 async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) -> impl Responder {
     let context = create_context("search", None);
     
-    // Sign the message (mock)
-    let message_str = serde_json::json!({"status": "pending"}).to_string();
+    // Call Pricing Engine for dynamic fares
+    let client = reqwest::Client::new();
+    let pricing_url = std::env::var("PRICING_ENGINE_URL")
+        .unwrap_or_else(|_| "https://discerning-consideration-production.up.railway.app/calculate-fare".to_string());
+    
+    let fare_req = FareRequest {
+        distance: 10.5,
+        time_of_day: "14:00".to_string(),
+        supply: 5.0,
+        demand: 8.0,
+    };
+
+    let fare_res = match client.post(&pricing_url).json(&fare_req).send().await {
+        Ok(res) => res.json::<FareResponse>().await.map(|r| r.fare).unwrap_or(150.0),
+        Err(_) => 150.0,
+    };
+    
+    let message_str = serde_json::json!({"status": "pending", "fare": fare_res}).to_string();
     let signature = sign_data(&message_str, &data.crypto.signing_key);
     
     // Initialize state in Redis
@@ -123,7 +139,7 @@ async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) ->
         return HttpResponse::InternalServerError().json(serde_json::json!({"error": format!("Redis set failed: {}", e)}));
     }
     
-    println!("Initiating ONDC Search: transaction_id={}", context.transaction_id);
+    println!("Initiating ONDC Search: transaction_id={}, pricing_url={}", context.transaction_id, pricing_url);
     
     HttpResponse::Ok().append_header(("X-Gateway-Signature", signature)).json(serde_json::json!({
         "message": { "ack": { "status": "ACK" } },
