@@ -303,6 +303,25 @@ async fn index() -> impl Responder {
     HttpResponse::Ok().json(serde_json::json!({ "status": "running" }))
 }
 
+#[post("/simulate_on_search/{transaction_id}")]
+async fn simulate_on_search(path: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    let tx_id = path.into_inner();
+    let catalog = serde_json::json!({
+        "providers": [{
+            "id": "provider_456",
+            "descriptor": { "name": "ONDC Ride Provider" },
+            "items": [{
+                "id": "item_123",
+                "descriptor": { "name": "Standard Cab" },
+                "price": { "value": "250.0", "currency": "INR" }
+            }]
+        }]
+    });
+    let mut store = data.transactions.write().await;
+    store.insert(tx_id, catalog);
+    HttpResponse::Ok().json(serde_json::json!({"status": "callback_simulated"}))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
@@ -335,6 +354,7 @@ async fn main() -> std::io::Result<()> {
             .service(login)
             .service(search)
             .service(on_search)
+            .service(simulate_on_search)
             .service(poll_search)
             .service(select)
             .service(on_select)
