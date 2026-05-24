@@ -55,9 +55,12 @@ function App() {
       {/* Map Modal */}
       {showMap && (
         <LocationPicker 
-          onLocationSelect={(loc) => {
-            if (showMap === 'pickup') setPickup(loc);
-            else setDrop(loc);
+          onLocationSelect={(label, _latlng) => {
+            if (showMap === 'pickup') {
+              setPickup(label);
+            } else {
+              setDrop(label);
+            }
           }}
           onClose={() => setShowMap(null)}
         />
@@ -91,31 +94,35 @@ function App() {
             </p>
             
             <form onSubmit={handleSearch} className="bg-white p-6 rounded-3xl shadow-xl shadow-slate-200 border border-slate-100 space-y-4">
-              <div className="space-y-1">
+              <div className="space-y-1 relative">
                 <label className="text-xs font-bold text-slate-400 uppercase ml-1">Pickup Location</label>
                 <input 
                   type="text" 
                   value={pickup}
-                  onChange={(e) => setPickup(e.target.value)}
                   onClick={() => setShowMap('pickup')}
                   readOnly
-                  placeholder="Click to select pickup..." 
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900 cursor-pointer"
+                  placeholder="Search pickup location..." 
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900 cursor-pointer pr-12"
                   required
                 />
+                <button type="button" onClick={() => setShowMap('pickup')} className="absolute right-4 top-10 text-slate-400 hover:text-ondc-blue">
+                  📍
+                </button>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 relative">
                 <label className="text-xs font-bold text-slate-400 uppercase ml-1">Drop Location</label>
                 <input 
                   type="text" 
                   value={drop}
-                  onChange={(e) => setDrop(e.target.value)}
                   onClick={() => setShowMap('drop')}
                   readOnly
-                  placeholder="Click to select drop..." 
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900 cursor-pointer"
+                  placeholder="Search drop location..." 
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-ondc-blue text-slate-900 cursor-pointer pr-12"
                   required
                 />
+                <button type="button" onClick={() => setShowMap('drop')} className="absolute right-4 top-10 text-slate-400 hover:text-ondc-blue">
+                  📍
+                </button>
               </div>
               <button 
                 disabled={loading}
