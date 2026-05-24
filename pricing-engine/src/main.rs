@@ -33,11 +33,14 @@ async fn calculate_fare(request: web::Json<FareRequest>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8081".to_string());
+    println!("Starting pricing engine on port: {}", port);
+    
     HttpServer::new(|| {
         App::new()
             .service(calculate_fare)
     })
-    .bind(("127.0.0.1", 8081))?
+    .bind(format!("0.0.0.0:{}", port))?
     .run()
     .await
 }
