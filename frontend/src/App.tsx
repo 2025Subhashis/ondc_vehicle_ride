@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import LocationPicker from './LocationPicker'
+import IssueReport from './IssueReport'
 
 interface RideProvider {
   id: string;
@@ -18,38 +19,40 @@ function App() {
   const [drop, setDrop] = useState('')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<RideProvider[]>([])
-  
+
   const [showMap, setShowMap] = useState<'pickup' | 'drop' | null>(null)
-const handleSearch = async (e: React.FormEvent) => {
-  e.preventDefault()
-  setLoading(true)
-  try {
-    const response = await fetch('https://ondc-backend-gateway-production.up.railway.app/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pickup_location: pickup, drop_location: drop })
-    })
-    const data = await response.json()
-    const txId = data.context.transaction_id
+  const [showIssue, setShowIssue] = useState<string | null>(null)
 
-    // Start polling
-    const pollInterval = setInterval(async () => {
-      const pollResponse = await fetch(`https://ondc-backend-gateway-production.up.railway.app/poll_search?transaction_id=${txId}`)
-      const pollData = await pollResponse.json()
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const response = await fetch('https://ondc-backend-gateway-production.up.railway.app/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pickup_location: pickup, drop_location: drop })
+      })
+      const data = await response.json()
+      const txId = data.context.transaction_id
 
-      if (pollData.status !== 'pending') {
-        clearInterval(pollInterval)
-        setResults(pollData.providers || [])
-        setLoading(false)
-      }
-    }, 2000)
+      // Start polling
+      const pollInterval = setInterval(async () => {
+        const pollResponse = await fetch(`https://ondc-backend-gateway-production.up.railway.app/poll_search?transaction_id=${txId}`)
+        const pollData = await pollResponse.json()
 
-  } catch (error) {
-    console.error('Search failed:', error)
-    setLoading(false)
+        if (pollData.status !== 'pending') {
+          clearInterval(pollInterval)
+          setResults(pollData.providers || [])
+          setLoading(false)
+        }
+      }, 2000)
+
+    } catch (error) {
+      console.error('Search failed:', error)
+      setLoading(false)
+    }
   }
-}
-
+  // ... (handleSearch remains the same)
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -57,14 +60,16 @@ const handleSearch = async (e: React.FormEvent) => {
       {showMap && (
         <LocationPicker 
           onLocationSelect={(label, _latlng) => {
-            if (showMap === 'pickup') {
-              setPickup(label);
-            } else {
-              setDrop(label);
-            }
+            if (showMap === 'pickup') setPickup(label);
+            else setDrop(label);
           }}
           onClose={() => setShowMap(null)}
         />
+      )}
+
+      {/* Issue Modal */}
+      {showIssue && (
+        <IssueReport transactionId={showIssue} onClose={() => setShowIssue(null)} />
       )}
 
       {/* Header */}
@@ -75,12 +80,13 @@ const handleSearch = async (e: React.FormEvent) => {
             <h1 className="text-xl font-bold text-slate-900 tracking-tight">ONDC Vehicle</h1>
           </div>
           <nav className="flex gap-6 text-sm font-medium text-slate-600">
+            <button onClick={() => setShowIssue('demo_tx_123')} className="hover:text-red-600 transition-colors">Report Issue</button>
             <a href="#" className="hover:text-ondc-blue transition-colors">My Bookings</a>
-            <a href="#" className="hover:text-ondc-blue transition-colors">Support</a>
             <button className="bg-ondc-blue text-white px-4 py-2 rounded-full hover:bg-ondc-dark transition-all">Login</button>
           </nav>
         </div>
       </header>
+
 
       <main className="max-w-6xl mx-auto px-6 py-12">
         {/* Hero & Search */}
@@ -153,7 +159,7 @@ const handleSearch = async (e: React.FormEvent) => {
             <h3 className="text-2xl font-bold text-slate-900">Available Rides</h3>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {results.map((provider) => (
-                provider.items.map((item) => (
+                provider.items.map((item: RideItem) => (
                   <div key={item.id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow group">
                     <div className="flex justify-between items-start mb-4">
                       <div>
