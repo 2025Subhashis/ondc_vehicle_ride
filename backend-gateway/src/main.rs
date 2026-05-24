@@ -83,9 +83,26 @@ struct Claims {
     exp: usize,
 }
 
-#[get("/")]
-async fn index() -> impl Responder {
-    HttpResponse::Ok().body("Welcome to ONDC Vehicle Booking Gateway")
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+struct AppState {
+    transactions: RwLock<HashMap<String, serde_json::Value>>,
+}
+
+#[get("/poll_search")]
+async fn poll_search(
+    request: web::Query<std::collections::HashMap<String, String>>,
+    data: web::Data<AppState>
+) -> impl Responder {
+    let transaction_id = request.get("transaction_id").unwrap();
+    let store = data.transactions.read().await;
+    
+    match store.get(transaction_id) {
+        Some(catalog) => HttpResponse::Ok().json(catalog),
+        None => HttpResponse::Accepted().json(serde_json::json!({ "status": "pending" })),
+    }
 }
 
 #[post("/login")]
@@ -127,7 +144,7 @@ struct FareResponse {
 }
 
 #[post("/search")]
-async fn search(request: web::Json<SearchRequest>) -> impl Responder {
+async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) -> impl Responder {
     let context = create_context("search", None);
     
     // Call Pricing Engine for dynamic fares
@@ -135,7 +152,7 @@ async fn search(request: web::Json<SearchRequest>) -> impl Responder {
     let pricing_url = "http://127.0.0.1:8081/calculate-fare";
     
     let fare_req = FareRequest {
-        distance: 10.5, // Mock distance
+        distance: 10.5,
         time_of_day: "14:00".to_string(),
         supply: 5.0,
         demand: 8.0,
@@ -143,41 +160,29 @@ async fn search(request: web::Json<SearchRequest>) -> impl Responder {
 
     let fare_res = match client.post(pricing_url).json(&fare_req).send().await {
         Ok(res) => res.json::<FareResponse>().await.map(|r| r.fare).unwrap_or(150.0),
-        Err(_) => 150.0, // Fallback
+        Err(_) => 150.0,
     };
 
-    let message = Intent {
-        fulfillment: Fulfillment {
-            start: Location { gps: request.pickup_location.clone() },
-            end: Location { gps: request.drop_location.clone() },
-        },
-    };
+    // Initialize state as pending
+    let mut store = data.transactions.write().await;
+    store.insert(context.transaction_id.clone(), serde_json::json!({ "status": "pending" }));
+    drop(store);
     
-    println!("Initiating ONDC Search with Fare calculation: transaction_id={}, calculated_fare={}", context.transaction_id, fare_res);
+    println!("Initiating ONDC Search: transaction_id={}", context.transaction_id);
     
     HttpResponse::Ok().json(serde_json::json!({
-        "message": { 
-            "ack": { "status": "ACK" },
-            "catalog": { // Including catalog in synchronous ACK for demonstration in frontend
-                "providers": [{
-                    "id": "BPP_1",
-                    "descriptor": { "name": "ONDC Ride Provider" },
-                    "items": [{
-                        "id": "item_sedan",
-                        "descriptor": { "name": "Premium Sedan" },
-                        "price": { "value": fare_res.to_string(), "currency": "INR" }
-                    }]
-                }]
-            }
-        },
+        "message": { "ack": { "status": "ACK" } },
         "context": context
     }))
 }
 
 #[post("/on_search")]
-async fn on_search(request: web::Json<BecknRequest<Catalog>>) -> impl Responder {
+async fn on_search(request: web::Json<BecknRequest<Catalog>>, data: web::Data<AppState>) -> impl Responder {
     println!("Received on_search for transaction_id={}", request.context.transaction_id);
-    // Process catalog results...
+    
+    let mut store = data.transactions.write().await;
+    store.insert(request.context.transaction_id.clone(), serde_json::json!(request.message));
+    
     HttpResponse::Ok().json(serde_json::json!({ "message": { "ack": { "status": "ACK" } } }))
 }
 
@@ -266,7 +271,11 @@ async fn on_confirm() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
+    let app_state = web::Data::new(AppState {
+        transactions: RwLock::new(HashMap::new()),
+    });
+    
+    HttpServer::new(move || {
         let cors = Cors::default()
             .allowed_origin("https://2025Subhashis.github.io")
             .allowed_methods(vec!["GET", "POST", "OPTIONS"])
@@ -274,11 +283,13 @@ async fn main() -> std::io::Result<()> {
             .supports_credentials()
             .max_age(3600);
         App::new()
+            .app_data(app_state.clone())
             .wrap(cors)
             .service(index)
             .service(login)
             .service(search)
             .service(on_search)
+            .service(poll_search)
             .service(select)
             .service(on_select)
             .service(init)
