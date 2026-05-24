@@ -27,7 +27,7 @@ function App() {
     e.preventDefault()
     setLoading(true)
     try {
-      const response = await fetch('https://ondc-backend-gateway-production.up.railway.app/search', {
+      const response = await fetch('https://ondcvehicleride-production.up.railway.app/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pickup_location: pickup, drop_location: drop })
@@ -37,7 +37,7 @@ function App() {
 
       // Start polling
       const pollInterval = setInterval(async () => {
-        const pollResponse = await fetch(`https://ondc-backend-gateway-production.up.railway.app/poll_search?transaction_id=${txId}`)
+        const pollResponse = await fetch(`https://ondcvehicleride-production.up.railway.app/poll_search?transaction_id=${txId}`)
         const pollData = await pollResponse.json()
 
         if (pollData.status !== 'pending') {
@@ -52,6 +52,7 @@ function App() {
       setLoading(false)
     }
   }
+
   // ... (handleSearch remains the same)
 
   return (

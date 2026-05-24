@@ -35,7 +35,7 @@ export default function IssueReport({ transactionId, onClose }: IssueReportProps
     };
 
     try {
-      await fetch('https://ondc-backend-gateway-production.up.railway.app/issue', {
+      await fetch('https://ondcvehicleride-production.up.railway.app/issue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(issuePayload)
