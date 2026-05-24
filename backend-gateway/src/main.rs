@@ -115,9 +115,13 @@ async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) ->
     // Initialize state in Redis
     let mut conn = match data.redis_client.get_async_connection().await {
         Ok(c) => c,
-        Err(_) => return HttpResponse::InternalServerError().finish(),
+        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": format!("Redis connection failed: {}", e)})),
     };
-    let _: () = conn.set(&context.transaction_id, message_str).await.unwrap();
+    
+    let result: redis::RedisResult<()> = conn.set(&context.transaction_id, &message_str).await;
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(serde_json::json!({"error": format!("Redis set failed: {}", e)}));
+    }
     
     println!("Initiating ONDC Search: transaction_id={}", context.transaction_id);
     
@@ -144,10 +148,13 @@ async fn on_search(
     
     let mut conn = match data.redis_client.get_async_connection().await {
         Ok(c) => c,
-        Err(_) => return HttpResponse::InternalServerError().finish(),
+        Err(e) => return HttpResponse::InternalServerError().json(serde_json::json!({"error": format!("Redis connection failed: {}", e)})),
     };
     
-    let _: () = conn.set(&request.context.transaction_id, serde_json::json!(request.message).to_string()).await.unwrap();
+    let result: redis::RedisResult<()> = conn.set(&request.context.transaction_id, serde_json::json!(request.message).to_string()).await;
+    if let Err(e) = result {
+        return HttpResponse::InternalServerError().json(serde_json::json!({"error": format!("Redis set failed: {}", e)}));
+    }
     
     HttpResponse::Ok().json(serde_json::json!({ "message": { "ack": { "status": "ACK" } } }))
 }
