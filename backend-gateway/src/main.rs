@@ -1,4 +1,5 @@
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_cors::Cors;
 use serde::{Deserialize, Serialize};
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::{Utc, DateTime};
@@ -266,7 +267,12 @@ async fn on_confirm() -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
+        let cors = Cors::default()
+            .allowed_origin("https://2025Subhashis.github.io")
+            .allowed_methods(vec!["GET", "POST"])
+            .allowed_headers(vec![actix_web::http::header::CONTENT_TYPE]);
         App::new()
+            .wrap(cors)
             .service(index)
             .service(login)
             .service(search)
@@ -278,7 +284,7 @@ async fn main() -> std::io::Result<()> {
             .service(confirm)
             .service(on_confirm)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }

@@ -25,7 +25,7 @@ function App() {
     e.preventDefault()
     setLoading(true)
     try {
-      const response = await fetch('http://127.0.0.1:8080/search', {
+      const response = await fetch('https://ondc-backend-gateway-production.up.railway.app/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pickup_location: pickup, drop_location: drop })
