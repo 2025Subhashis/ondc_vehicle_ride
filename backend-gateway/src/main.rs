@@ -38,12 +38,26 @@ fn create_context(action: &str, transaction_id: Option<String>) -> Context {
 
 struct CryptoState {
     signing_key: SigningKey,
-    verifying_key: VerifyingKey,
+    // Mock Registry: Subscriber ID -> VerifyingKey
+    participant_registry: HashMap<String, VerifyingKey>,
 }
 
 struct AppState {
     redis_client: Client,
     crypto: CryptoState,
+}
+
+// Verification helper
+fn verify_incoming_request(
+    body: &str,
+    signature: &str,
+    subscriber_id: &str,
+    registry: &HashMap<String, VerifyingKey>
+) -> bool {
+    if let Some(verifying_key) = registry.get(subscriber_id) {
+        return verify_data(body, signature, verifying_key);
+    }
+    false
 }
 
 #[get("/poll_search")]
@@ -229,6 +243,10 @@ async fn main() -> std::io::Result<()> {
     let mut csprng = OsRng;
     let signing_key = SigningKey::generate(&mut csprng);
     let verifying_key = signing_key.verifying_key();
+    
+    // Mock registry: add our own verifying key for simulation
+    let mut participant_registry = HashMap::new();
+    participant_registry.insert("bap.gateway.com".to_string(), verifying_key);
 
     // Initialize Redis Client
     let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
@@ -238,7 +256,7 @@ async fn main() -> std::io::Result<()> {
         redis_client,
         crypto: CryptoState {
             signing_key,
-            verifying_key,
+            participant_registry,
         },
     });
     
