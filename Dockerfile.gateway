@@ -8,7 +8,7 @@ WORKDIR /app
 COPY . .
 
 # Build the backend-gateway specifically
-RUN cargo build --release -p backend-gateway
+RUN rm -rf /usr/local/cargo/registry/index && cargo update && cargo build --release -p backend-gateway
 
 # --- Run Stage ---
 FROM debian:bookworm-slim

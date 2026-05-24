@@ -8,7 +8,7 @@ WORKDIR /app
 COPY . .
 
 # Build the pricing-engine specifically
-RUN cargo build --release -p pricing-engine
+RUN rm -rf /usr/local/cargo/registry/index && cargo update && cargo build --release -p pricing-engine
 
 # --- Run Stage ---
 FROM debian:bookworm-slim
