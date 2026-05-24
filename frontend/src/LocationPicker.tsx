@@ -27,7 +27,11 @@ interface LocationPickerProps {
 function SearchControl() {
   const map = useMap();
   useEffect(() => {
-    const provider = new OpenStreetMapProvider();
+    const provider = new OpenStreetMapProvider({
+      params: {
+        countrycodes: 'in', // Bias results to India
+      },
+    });
     const searchControl = new (GeoSearchControl as any)({
       provider: provider,
       style: 'bar',
@@ -35,7 +39,7 @@ function SearchControl() {
       autoCompleteDelay: 250,
       showMarker: true,
       keepResult: true,
-      searchLabel: 'Search for location...',
+      searchLabel: 'Search for location in India...',
     });
     map.addControl(searchControl);
     return () => { map.removeControl(searchControl); };
@@ -84,7 +88,7 @@ export default function LocationPicker({ onLocationSelect, onClose }: LocationPi
       <div className="bg-white w-full max-w-lg p-6 rounded-3xl shadow-2xl">
         <h3 className="text-xl font-bold mb-4">Select Location</h3>
         <div className="h-96 mb-4 rounded-xl overflow-hidden relative">
-          <MapContainer center={[12.9716, 77.5946] as L.LatLngExpression} zoom={13} style={{ height: '100%', width: '100%' }}>
+          <MapContainer center={[20.5937, 78.9629] as L.LatLngExpression} zoom={5} style={{ height: '100%', width: '100%' }}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <SearchControl />
             {position && <Marker position={position} />}
