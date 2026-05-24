@@ -1,5 +1,5 @@
 mod models;
-use models::{Context, BecknRequest, SearchMessage, Intent, Fulfillment, Location, Catalog, Provider, Descriptor, Item, Price, AckMessage, AckStatus};
+use models::{Context, BecknRequest, SearchMessage, Intent, Fulfillment, Location, Catalog, Provider, Descriptor, Item, Price, AckMessage, AckStatus, IssueMessage, OnIssueMessage};
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_cors::Cors;
@@ -257,6 +257,39 @@ async fn simulate_on_search(path: web::Path<String>, data: web::Data<AppState>) 
     HttpResponse::Ok().json(serde_json::json!({"status": "callback_simulated"}))
 }
 
+#[post("/issue")]
+async fn issue(request: web::Json<BecknRequest<IssueMessage>>, data: web::Data<AppState>) -> impl Responder {
+    let context = request.context.clone();
+    let mut conn = match data.redis_client.get_async_connection().await {
+        Ok(c) => c,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+    
+    // Persist issue state in Redis
+    let _: () = conn.set(&request.message.issue.id, serde_json::json!(request.message.issue).to_string()).await.unwrap();
+    
+    println!("Received ONDC Issue: issue_id={}", request.message.issue.id);
+    
+    HttpResponse::Ok().json(serde_json::json!({
+        "message": { "ack": { "status": "ACK" } },
+        "context": context
+    }))
+}
+
+#[post("/on_issue")]
+async fn on_issue(request: web::Json<BecknRequest<OnIssueMessage>>, data: web::Data<AppState>) -> impl Responder {
+    println!("Received on_issue for issue_id={}", request.message.issue.id);
+    
+    let mut conn = match data.redis_client.get_async_connection().await {
+        Ok(c) => c,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+    
+    let _: () = conn.set(&request.message.issue.id, serde_json::json!(request.message.issue).to_string()).await.unwrap();
+    
+    HttpResponse::Ok().json(serde_json::json!({ "message": { "ack": { "status": "ACK" } } }))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
@@ -295,6 +328,8 @@ async fn main() -> std::io::Result<()> {
             .service(on_search)
             .service(simulate_on_search)
             .service(poll_search)
+            .service(issue)
+            .service(on_issue)
             .service(select)
             .service(on_select)
             .service(init)

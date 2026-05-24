@@ -81,3 +81,34 @@ pub struct AckMessage {
 pub struct AckStatus {
     pub status: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct IssueMessage {
+    pub issue: Issue,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Issue {
+    pub id: String,
+    pub category: String,
+    pub sub_category: String,
+    pub status: String,
+    pub description: Description,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Description {
+    pub short_desc: String,
+    pub long_desc: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct OnIssueMessage {
+    pub issue: IssueResponse,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct IssueResponse {
+    pub id: String,
+    pub status: String,
+}
