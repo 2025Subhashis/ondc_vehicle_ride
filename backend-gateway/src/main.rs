@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::Utc;
 use uuid::Uuid;
-use ed25519_dalek::{SigningKey, VerifyingKey, Signer};
+use ed25519_dalek::{SigningKey, VerifyingKey, Signer, Signature, Verifier};
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
@@ -19,6 +19,18 @@ use redis::{AsyncCommands, Client};
 fn sign_data(data: &str, signing_key: &SigningKey) -> String {
     let signature = signing_key.sign(data.as_bytes());
     general_purpose::STANDARD.encode(signature.to_bytes())
+}
+
+fn verify_data(data: &str, signature_b64: &str, verifying_key: &VerifyingKey) -> bool {
+    let sig_bytes = match general_purpose::STANDARD.decode(signature_b64) {
+        Ok(bytes) => bytes,
+        Err(_) => return false,
+    };
+    let signature = match ed25519_dalek::Signature::from_slice(&sig_bytes) {
+        Ok(sig) => sig,
+        Err(_) => return false,
+    };
+    verifying_key.verify(data.as_bytes(), &signature).is_ok()
 }
 
 fn create_context(action: &str, transaction_id: Option<String>) -> Context {
