@@ -1,8 +1,13 @@
 mod models;
 use models::{Context, BecknRequest, SearchMessage, Intent, Fulfillment, Location, Catalog, Provider, Descriptor, Item, Price, AckMessage, AckStatus, IssueMessage, OnIssueMessage, SearchRequest, Claims, FareRequest, FareResponse, SelectRequest, InitRequest, ConfirmRequest};
 
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, post, options, web, App, HttpResponse, HttpServer, Responder, middleware::Logger};
 use actix_cors::Cors;
+// ...
+#[options("/search")]
+async fn search_options() -> impl Responder {
+    HttpResponse::Ok().finish()
+}
 use serde::{Deserialize, Serialize};
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::Utc;
@@ -271,6 +276,7 @@ async fn on_issue(request: web::Json<BecknRequest<OnIssueMessage>>, data: web::D
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init();
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     println!("Starting server on port: {}", port);
 
@@ -303,11 +309,13 @@ async fn main() -> std::io::Result<()> {
             .supports_credentials()
             .max_age(3600);
         App::new()
+            .wrap(Logger::default())
             .app_data(app_state.clone())
             .wrap(cors)
             .service(index)
             .service(login)
             .service(search)
+            .service(search_options)
             .service(on_search)
             .service(simulate_on_search)
             .service(poll_search)
