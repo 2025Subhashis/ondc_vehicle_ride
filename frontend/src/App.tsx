@@ -20,35 +20,36 @@ function App() {
   const [results, setResults] = useState<RideProvider[]>([])
   
   const [showMap, setShowMap] = useState<'pickup' | 'drop' | null>(null)
+const handleSearch = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setLoading(true)
+  try {
+    const response = await fetch('https://ondc-backend-gateway-production.up.railway.app/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pickup_location: pickup, drop_location: drop })
+    })
+    const data = await response.json()
+    const txId = data.context.transaction_id
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      const response = await fetch('https://ondc-backend-gateway-production.up.railway.app/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pickup_location: pickup, drop_location: drop })
-      })
-      const data = await response.json()
-      if (data.message && data.message.catalog) {
-        setResults(data.message.catalog.providers)
+    // Start polling
+    const pollInterval = setInterval(async () => {
+      const pollResponse = await fetch(`https://ondc-backend-gateway-production.up.railway.app/poll_search?transaction_id=${txId}`)
+      const pollData = await pollResponse.json()
+
+      if (pollData.status !== 'pending') {
+        clearInterval(pollInterval)
+        setResults(pollData.providers || [])
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('Search failed:', error)
-      setResults([{
-        id: 'mock_bpp',
-        descriptor: { name: 'Demo Provider' },
-        items: [{
-          id: 'mock_item',
-          descriptor: { name: 'Standard Cab' },
-          price: { value: '150.0', currency: 'INR' }
-        }]
-      }])
-    } finally {
-      setLoading(false)
-    }
+    }, 2000)
+
+  } catch (error) {
+    console.error('Search failed:', error)
+    setLoading(false)
   }
+}
+
 
   return (
     <div className="min-h-screen bg-slate-50">
