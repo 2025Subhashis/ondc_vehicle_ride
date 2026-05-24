@@ -269,6 +269,11 @@ async fn on_confirm() -> impl Responder {
     HttpResponse::Ok().json(serde_json::json!({ "status": "implemented soon" }))
 }
 
+#[get("/")]
+async fn index() -> impl Responder {
+    HttpResponse::Ok().json(serde_json::json!({ "status": "running" }))
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(AppState {
