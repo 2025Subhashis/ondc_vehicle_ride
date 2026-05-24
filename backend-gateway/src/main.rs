@@ -115,8 +115,10 @@ struct CryptoState {
     verifying_key: VerifyingKey,
 }
 
+use redis::{AsyncCommands, Client};
+
 struct AppState {
-    transactions: RwLock<HashMap<String, serde_json::Value>>,
+    redis_client: Client,
     crypto: CryptoState,
 }
 
@@ -126,11 +128,14 @@ async fn poll_search(
     data: web::Data<AppState>
 ) -> impl Responder {
     let transaction_id = request.get("transaction_id").unwrap();
-    let store = data.transactions.read().await;
+    let mut conn = match data.redis_client.get_async_connection().await {
+        Ok(c) => c,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
     
-    match store.get(transaction_id) {
-        Some(catalog) => HttpResponse::Ok().json(catalog),
-        None => HttpResponse::Accepted().json(serde_json::json!({ "status": "pending" })),
+    match conn.get::<_, String>(transaction_id).await {
+        Ok(data) => HttpResponse::Ok().body(data),
+        Err(_) => HttpResponse::Accepted().json(serde_json::json!({ "status": "pending" })),
     }
 }
 
@@ -192,10 +197,12 @@ async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) ->
     let message_str = message.to_string();
     let signature = sign_data(&message_str, &data.crypto.signing_key);
     
-    // Initialize state
-    let mut store = data.transactions.write().await;
-    store.insert(context.transaction_id.clone(), serde_json::json!({ "status": "pending" }));
-    drop(store);
+    // Initialize state in Redis
+    let mut conn = match data.redis_client.get_async_connection().await {
+        Ok(c) => c,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+    let _: () = conn.set(&context.transaction_id, serde_json::json!({ "status": "pending" }).to_string()).await.unwrap();
     
     println!("Initiating ONDC Search: transaction_id={}", context.transaction_id);
     
@@ -209,8 +216,12 @@ async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) ->
 async fn on_search(request: web::Json<BecknRequest<Catalog>>, data: web::Data<AppState>) -> impl Responder {
     println!("Received on_search for transaction_id={}", request.context.transaction_id);
     
-    let mut store = data.transactions.write().await;
-    store.insert(request.context.transaction_id.clone(), serde_json::json!(request.message));
+    let mut conn = match data.redis_client.get_async_connection().await {
+        Ok(c) => c,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+    
+    let _: () = conn.set(&request.context.transaction_id, serde_json::json!(request.message).to_string()).await.unwrap();
     
     HttpResponse::Ok().json(serde_json::json!({ "message": { "ack": { "status": "ACK" } } }))
 }
@@ -332,8 +343,12 @@ async fn main() -> std::io::Result<()> {
     let signing_key = SigningKey::generate(&mut csprng);
     let verifying_key = signing_key.verifying_key();
 
+    // Initialize Redis Client
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+    let redis_client = redis::Client::open(redis_url).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
     let app_state = web::Data::new(AppState {
-        transactions: RwLock::new(HashMap::new()),
+        redis_client,
         crypto: CryptoState {
             signing_key,
             verifying_key,
