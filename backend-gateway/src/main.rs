@@ -1,5 +1,5 @@
 mod models;
-use models::{Context, BecknRequest, SearchMessage, Intent, Fulfillment, Location, Catalog, Provider, Descriptor, Item, Price, AckMessage, AckStatus, IssueMessage, OnIssueMessage};
+use models::{Context, BecknRequest, SearchMessage, Intent, Fulfillment, Location, Catalog, Provider, Descriptor, Item, Price, AckMessage, AckStatus, IssueMessage, OnIssueMessage, SearchRequest, Claims, FareRequest, FareResponse, SelectRequest, InitRequest, ConfirmRequest};
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use actix_cors::Cors;
@@ -73,52 +73,12 @@ async fn login() -> impl Responder {
     HttpResponse::Ok().json(token)
 }
 
-fn create_context(action: &str, transaction_id: Option<String>) -> Context {
-    Context {
-        domain: "nic2004:60221".to_string(),
-        country: "IND".to_string(),
-        city: "std:080".to_string(),
-        action: action.to_string(),
-        core_version: "1.0.0".to_string(),
-        bap_id: "bap.gateway.com".to_string(),
-        bap_uri: "http://localhost:8080".to_string(),
-        transaction_id: transaction_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
-        message_id: Uuid::new_v4().to_string(),
-        timestamp: Utc::now(),
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct FareRequest {
-    distance: f64,
-    time_of_day: String,
-    supply: f64,
-    demand: f64,
-}
-
-#[derive(Serialize, Deserialize)]
-struct FareResponse {
-    fare: f64,
-}
-
 #[post("/search")]
 async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) -> impl Responder {
     let context = create_context("search", None);
     
-    // ... (pricing logic)
-    let fare_res = 150.0;
-
-    let message = serde_json::json!({
-        "intent": {
-            "fulfillment": {
-                "start": { "gps": request.pickup_location },
-                "end": { "gps": request.drop_location }
-            }
-        }
-    });
-    
-    // Sign the message
-    let message_str = message.to_string();
+    // Sign the message (mock)
+    let message_str = serde_json::json!({"status": "pending"}).to_string();
     let signature = sign_data(&message_str, &data.crypto.signing_key);
     
     // Initialize state in Redis
@@ -126,7 +86,7 @@ async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) ->
         Ok(c) => c,
         Err(_) => return HttpResponse::InternalServerError().finish(),
     };
-    let _: () = conn.set(&context.transaction_id, serde_json::json!({ "status": "pending" }).to_string()).await.unwrap();
+    let _: () = conn.set(&context.transaction_id, message_str).await.unwrap();
     
     println!("Initiating ONDC Search: transaction_id={}", context.transaction_id);
     
@@ -150,21 +110,9 @@ async fn on_search(request: web::Json<BecknRequest<Catalog>>, data: web::Data<Ap
     HttpResponse::Ok().json(serde_json::json!({ "message": { "ack": { "status": "ACK" } } }))
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-struct SelectRequest {
-    item_id: String,
-    provider_id: String,
-    transaction_id: String,
-}
-
 #[post("/select")]
 async fn select(request: web::Json<SelectRequest>) -> impl Responder {
     let context = create_context("select", Some(request.transaction_id.clone()));
-    let message = serde_json::json!({
-        "order": {
-            "items": [{ "id": request.item_id, "provider_id": request.provider_id }]
-        }
-    });
     
     println!("Initiating ONDC Select: transaction_id={}", context.transaction_id);
 
@@ -176,20 +124,7 @@ async fn select(request: web::Json<SelectRequest>) -> impl Responder {
 
 #[post("/on_select")]
 async fn on_select() -> impl Responder {
-    // Implementation for on_select...
     HttpResponse::Ok().json(serde_json::json!({ "status": "implemented soon" }))
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct InitRequest {
-    transaction_id: String,
-    billing_info: BillingInfo,
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct BillingInfo {
-    name: String,
-    phone: String,
 }
 
 #[post("/init")]
@@ -206,13 +141,7 @@ async fn init(request: web::Json<InitRequest>) -> impl Responder {
 
 #[post("/on_init")]
 async fn on_init() -> impl Responder {
-    // Implementation for on_init...
     HttpResponse::Ok().json(serde_json::json!({ "status": "implemented soon" }))
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct ConfirmRequest {
-    transaction_id: String,
 }
 
 #[post("/confirm")]
@@ -229,7 +158,6 @@ async fn confirm(request: web::Json<ConfirmRequest>) -> impl Responder {
 
 #[post("/on_confirm")]
 async fn on_confirm() -> impl Responder {
-    // Implementation for on_confirm...
     HttpResponse::Ok().json(serde_json::json!({ "status": "implemented soon" }))
 }
 
@@ -252,8 +180,11 @@ async fn simulate_on_search(path: web::Path<String>, data: web::Data<AppState>) 
             }]
         }]
     });
-    let mut store = data.transactions.write().await;
-    store.insert(tx_id, catalog);
+    let mut conn = match data.redis_client.get_async_connection().await {
+        Ok(c) => c,
+        Err(_) => return HttpResponse::InternalServerError().finish(),
+    };
+    let _: () = conn.set(&tx_id, catalog.to_string()).await.unwrap();
     HttpResponse::Ok().json(serde_json::json!({"status": "callback_simulated"}))
 }
 
@@ -265,7 +196,6 @@ async fn issue(request: web::Json<BecknRequest<IssueMessage>>, data: web::Data<A
         Err(_) => return HttpResponse::InternalServerError().finish(),
     };
     
-    // Persist issue state in Redis
     let _: () = conn.set(&request.message.issue.id, serde_json::json!(request.message.issue).to_string()).await.unwrap();
     
     println!("Received ONDC Issue: issue_id={}", request.message.issue.id);

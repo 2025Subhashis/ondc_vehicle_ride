@@ -112,3 +112,52 @@ pub struct IssueResponse {
     pub id: String,
     pub status: String,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SearchRequest {
+    pub pickup_location: String,
+    pub drop_location: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Claims {
+    pub sub: String,
+    pub exp: usize,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FareRequest {
+    pub distance: f64,
+    pub time_of_day: String,
+    pub supply: f64,
+    pub demand: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct FareResponse {
+    pub fare: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SelectRequest {
+    pub item_id: String,
+    pub provider_id: String,
+    pub transaction_id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct InitRequest {
+    pub transaction_id: String,
+    pub billing_info: BillingInfo,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BillingInfo {
+    pub name: String,
+    pub phone: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ConfirmRequest {
+    pub transaction_id: String,
+}
