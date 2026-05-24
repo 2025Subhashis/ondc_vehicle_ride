@@ -4,6 +4,27 @@ use serde::{Deserialize, Serialize};
 use jsonwebtoken::{encode, Header, EncodingKey};
 use chrono::{Utc, DateTime};
 use uuid::Uuid;
+use ed25519_dalek::{SigningKey, VerifyingKey, Signer, Signature, Verifier};
+use base64::{engine::general_purpose, Engine as _};
+
+// --- Crypto Helpers ---
+
+fn sign_data(data: &str, signing_key: &SigningKey) -> String {
+    let signature = signing_key.sign(data.as_bytes());
+    general_purpose::STANDARD.encode(signature.to_bytes())
+}
+
+fn verify_data(data: &str, signature_b64: &str, verifying_key: &VerifyingKey) -> bool {
+    let sig_bytes = match general_purpose::STANDARD.decode(signature_b64) {
+        Ok(bytes) => bytes,
+        Err(_) => return false,
+    };
+    let signature = match Signature::from_slice(&sig_bytes) {
+        Ok(sig) => sig,
+        Err(_) => return false,
+    };
+    verifying_key.verify(data.as_bytes(), &signature).is_ok()
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Context {
@@ -87,8 +108,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use rand_core::OsRng; // Add this import
+
+struct CryptoState {
+    signing_key: SigningKey,
+    verifying_key: VerifyingKey,
+}
+
 struct AppState {
     transactions: RwLock<HashMap<String, serde_json::Value>>,
+    crypto: CryptoState,
 }
 
 #[get("/poll_search")]
@@ -147,30 +176,30 @@ struct FareResponse {
 async fn search(request: web::Json<SearchRequest>, data: web::Data<AppState>) -> impl Responder {
     let context = create_context("search", None);
     
-    // Call Pricing Engine for dynamic fares
-    let client = reqwest::Client::new();
-    let pricing_url = "http://127.0.0.1:8081/calculate-fare";
+    // ... (pricing logic)
+    let fare_res = 150.0;
+
+    let message = serde_json::json!({
+        "intent": {
+            "fulfillment": {
+                "start": { "gps": request.pickup_location },
+                "end": { "gps": request.drop_location }
+            }
+        }
+    });
     
-    let fare_req = FareRequest {
-        distance: 10.5,
-        time_of_day: "14:00".to_string(),
-        supply: 5.0,
-        demand: 8.0,
-    };
-
-    let fare_res = match client.post(pricing_url).json(&fare_req).send().await {
-        Ok(res) => res.json::<FareResponse>().await.map(|r| r.fare).unwrap_or(150.0),
-        Err(_) => 150.0,
-    };
-
-    // Initialize state as pending
+    // Sign the message
+    let message_str = message.to_string();
+    let signature = sign_data(&message_str, &data.crypto.signing_key);
+    
+    // Initialize state
     let mut store = data.transactions.write().await;
     store.insert(context.transaction_id.clone(), serde_json::json!({ "status": "pending" }));
     drop(store);
     
     println!("Initiating ONDC Search: transaction_id={}", context.transaction_id);
     
-    HttpResponse::Ok().json(serde_json::json!({
+    HttpResponse::Ok().append_header(("X-Gateway-Signature", signature)).json(serde_json::json!({
         "message": { "ack": { "status": "ACK" } },
         "context": context
     }))
@@ -279,8 +308,17 @@ async fn main() -> std::io::Result<()> {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     println!("Starting server on port: {}", port);
 
+    // Generate mock keys for local testing
+    let mut csprng = OsRng;
+    let signing_key = SigningKey::generate(&mut csprng);
+    let verifying_key = signing_key.verifying_key();
+
     let app_state = web::Data::new(AppState {
         transactions: RwLock::new(HashMap::new()),
+        crypto: CryptoState {
+            signing_key,
+            verifying_key,
+        },
     });
     
     HttpServer::new(move || {
