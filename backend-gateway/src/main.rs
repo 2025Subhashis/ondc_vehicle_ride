@@ -282,8 +282,7 @@ async fn main() -> std::io::Result<()> {
     
     HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin("https://2025subhashis.github.io")
-            .allowed_origin("https://2025Subhashis.github.io")
+            .allow_any_origin()
             .allowed_methods(vec!["GET", "POST", "OPTIONS"])
             .allowed_headers(vec![actix_web::http::header::CONTENT_TYPE, actix_web::http::header::AUTHORIZATION])
             .supports_credentials()
