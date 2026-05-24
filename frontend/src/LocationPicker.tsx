@@ -5,6 +5,7 @@ import L, { LatLng } from 'leaflet';
 // @ts-ignore
 import { GeoSearchControl, OpenStreetMapProvider } from 'leaflet-geosearch';
 import 'leaflet-geosearch/dist/geosearch.css';
+import './geosearch.css';
 
 // Fix for default marker icon
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -32,7 +33,9 @@ function SearchControl() {
       style: 'bar',
       autoComplete: true,
       autoCompleteDelay: 250,
-      showMarker: false,
+      showMarker: true,
+      keepResult: true,
+      searchLabel: 'Search for location...',
     });
     map.addControl(searchControl);
     return () => { map.removeControl(searchControl); };
@@ -80,7 +83,7 @@ export default function LocationPicker({ onLocationSelect, onClose }: LocationPi
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white w-full max-w-lg p-6 rounded-3xl shadow-2xl">
         <h3 className="text-xl font-bold mb-4">Select Location</h3>
-        <div className="h-64 mb-4 rounded-xl overflow-hidden relative">
+        <div className="h-96 mb-4 rounded-xl overflow-hidden relative">
           <MapContainer center={[12.9716, 77.5946] as L.LatLngExpression} zoom={13} style={{ height: '100%', width: '100%' }}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
             <SearchControl />
